@@ -1,0 +1,190 @@
+name: Build and Release Armbian Image
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Release type'
+        required: true
+        default: 'test'
+        type: choice
+        options:
+          - test
+          - release
+
+env:
+  BOARD: orangepi4-lts
+  BRANCH: current
+  RELEASE: bookworm
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # Armbian builds require significant resources
+    timeout-minutes: 480
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Free up disk space
+        run: |
+          echo "Disk space before cleanup:"
+          df -h
+
+          # Remove unnecessary packages to free up space
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
+
+          echo "Disk space after cleanup:"
+          df -h
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            git \
+            dialog \
+            lsb-release \
+            binutils \
+            ca-certificates
+
+      - name: Clone Armbian build system
+        run: |
+          git clone --depth 1 --branch main https://github.com/armbian/build armbian-build
+
+      - name: Copy custom configurations
+        run: |
+          cp -rv userpatches/* armbian-build/userpatches/
+
+          # Make scripts executable
+          chmod +x armbian-build/userpatches/customize-image.sh
+
+      - name: Build Armbian image
+        run: |
+          cd armbian-build
+
+          # Run the build using Docker (recommended for CI)
+          ./compile.sh \
+            BOARD=${{ env.BOARD }} \
+            BRANCH=${{ env.BRANCH }} \
+            RELEASE=${{ env.RELEASE }} \
+            BUILD_MINIMAL=no \
+            BUILD_DESKTOP=no \
+            KERNEL_CONFIGURE=no \
+            COMPRESS_OUTPUTIMAGE="sha,img" \
+            BUILD_ONLY="default"
+
+      - name: Prepare release artifacts
+        id: prepare
+        run: |
+          cd armbian-build/output/images
+
+          # Find the generated image
+          IMAGE_FILE=$(ls Armbian_*.img 2>/dev/null | head -n1)
+          SHA_FILE=$(ls Armbian_*.img.sha 2>/dev/null | head -n1)
+
+          if [ -z "$IMAGE_FILE" ]; then
+            echo "Error: No image file found!"
+            exit 1
+          fi
+
+          echo "Found image: $IMAGE_FILE"
+
+          # Compress the image
+          echo "Compressing image..."
+          xz -v -7 -T0 "$IMAGE_FILE"
+          IMAGE_XZ="${IMAGE_FILE}.xz"
+
+          # Generate checksums
+          sha256sum "$IMAGE_XZ" > "${IMAGE_XZ}.sha256"
+
+          # Set output variables
+          echo "image_file=${IMAGE_XZ}" >> $GITHUB_OUTPUT
+          echo "image_name=$(basename ${IMAGE_XZ})" >> $GITHUB_OUTPUT
+          echo "sha_file=${IMAGE_XZ}.sha256" >> $GITHUB_OUTPUT
+
+          # Also create a more user-friendly name
+          VERSION="${GITHUB_REF_NAME:-dev}"
+          FRIENDLY_NAME="OctoprintOS-OrangePi4LTS-${VERSION}.img.xz"
+          cp "$IMAGE_XZ" "$FRIENDLY_NAME"
+          cp "${IMAGE_XZ}.sha256" "${FRIENDLY_NAME}.sha256"
+
+          echo "friendly_name=${FRIENDLY_NAME}" >> $GITHUB_OUTPUT
+
+          ls -lh
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: armbian-image
+          path: |
+            armbian-build/output/images/*.img.xz
+            armbian-build/output/images/*.sha256
+          retention-days: 30
+
+      - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            armbian-build/output/images/OctoprintOS-*.img.xz
+            armbian-build/output/images/OctoprintOS-*.sha256
+          body: |
+            # Orange Pi 4 LTS - Octoprint Edition ${{ github.ref_name }}
+
+            ## What's Included
+            - 🐋 Docker + Portainer (port 9000)
+            - 🖨️ Octoprint container (port 5000)
+            - 📶 Comitup WiFi configuration
+            - 🔧 Auto-deployment on first boot
+
+            ## Quick Start
+
+            ### Flash to SD Card
+            1. Download `OctoprintOS-OrangePi4LTS-${{ github.ref_name }}.img.xz`
+            2. Verify checksum with `.sha256` file
+            3. Flash using [Etcher](https://www.balena.io/etcher/) or:
+               ```bash
+               xz -d OctoprintOS-OrangePi4LTS-${{ github.ref_name }}.img.xz
+               sudo dd if=OctoprintOS-OrangePi4LTS-${{ github.ref_name }}.img of=/dev/sdX bs=4M status=progress
+               ```
+
+            ### Install to eMMC
+            See [eMMC Installation Guide](https://github.com/${{ github.repository }}/blob/main/docs/EMMC_INSTALL.md)
+
+            ### First Boot
+            1. Connect to WiFi: `Octoprint-Setup-XXXX` (password: `octoprint`)
+            2. Configure WiFi: http://10.41.0.1
+            3. Access services:
+               - Portainer: http://device-ip:9000
+               - Octoprint: http://device-ip:5000
+
+            ## Default Credentials
+            - SSH: `root` / `1234` (change on first login)
+
+            ## checksums
+            See `.sha256` files for verification.
+
+            ---
+            Built with Armbian build system
+            Board: ${{ env.BOARD }} | Branch: ${{ env.BRANCH }} | Release: ${{ env.RELEASE }}
+          draft: false
+          prerelease: ${{ contains(github.ref_name, 'rc') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Comment on manual run
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          echo "✅ Build completed successfully!"
+          echo "📦 Artifacts are available in the workflow run"
+          echo "🏷️ To create a release, push a tag: git tag v1.0.0 && git push origin v1.0.0"

@@ -1,0 +1,19 @@
+# Armbian build outputs
+*.img
+*.img.xz
+*.sha
+*.asc
+
+# Build directories
+armbian-build/
+output/
+
+# Temporary files
+*.tmp
+*.log
+*.swp
+*~
+
+# OS specific
+.DS_Store
+Thumbs.db
