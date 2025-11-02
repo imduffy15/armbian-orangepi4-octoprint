@@ -38,6 +38,10 @@ sed -i 's|security.ubuntu.com|mirror.math.princeton.edu/pub|g' /etc/apt/sources.
 apt-get update
 apt-get install -y wget xz-utils mount qemu-user-static util-linux parted fdisk e2fsprogs file lsof udev
 
+# Register QEMU emulation for ARM64
+echo "Setting up ARM64 emulation..."
+update-binfmts --enable qemu-aarch64
+
 # Download and extract image
 mkdir -p "$WORK_DIR"
 
@@ -194,7 +198,27 @@ mount --bind /dev "$MOUNT_POINT/dev"
 mount --bind /dev/pts "$MOUNT_POINT/dev/pts"
 mount --bind /proc "$MOUNT_POINT/proc"
 mount --bind /sys "$MOUNT_POINT/sys"
+
+# Ensure QEMU static binary exists and copy it
+if [ ! -f "/usr/bin/qemu-aarch64-static" ]; then
+    echo "Error: qemu-aarch64-static not found"
+    exit 1
+fi
 cp /usr/bin/qemu-aarch64-static "$MOUNT_POINT/usr/bin/"
+
+# Verify QEMU binary is executable in chroot
+chmod +x "$MOUNT_POINT/usr/bin/qemu-aarch64-static"
+
+# Test ARM64 emulation before proceeding
+echo "Testing ARM64 emulation..."
+chroot "$MOUNT_POINT" /usr/bin/qemu-aarch64-static /bin/echo "ARM64 emulation working" || {
+    echo "Error: ARM64 emulation test failed"
+    echo "Available QEMU binaries:"
+    ls -la /usr/bin/qemu-* 2>/dev/null || echo "No QEMU binaries found"
+    echo "Checking binfmt registrations:"
+    cat /proc/sys/fs/binfmt_misc/qemu-aarch64 2>/dev/null || echo "No ARM64 binfmt registration"
+    exit 1
+}
 
 # Verify filesystem structure and setup DNS for chroot
 echo "Checking mounted filesystem structure..."
@@ -293,7 +317,10 @@ systemctl disable wpa_supplicant 2>/dev/null || true
 EOF
 
 chmod +x "$MOUNT_POINT/tmp/setup.sh"
-chroot "$MOUNT_POINT" /tmp/setup.sh
+
+# Run the setup script with explicit ARM64 emulation
+echo "Running setup script in ARM64 chroot..."
+chroot "$MOUNT_POINT" /usr/bin/qemu-aarch64-static /bin/bash /tmp/setup.sh
 
 # Cleanup
 rm -f "$MOUNT_POINT/tmp/setup.sh" "$MOUNT_POINT/usr/bin/qemu-aarch64-static"
