@@ -1,0 +1,119 @@
+name: Create Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v1.0.0)'
+        required: true
+        type: string
+      prerelease:
+        description: 'Mark as pre-release'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  IMAGE_NAME: octoprint-orangepi4
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Validate version
+      run: |
+        VERSION="${{ github.event.inputs.version }}"
+        # Ensure version starts with 'v'
+        if [[ ! "$VERSION" =~ ^v ]]; then
+          VERSION="v$VERSION"
+        fi
+        echo "VERSION=$VERSION" >> $GITHUB_ENV
+        echo "Release version: $VERSION"
+    
+    - name: Set up build environment
+      run: |
+        sudo chmod 777 $PWD
+    
+    - name: Build image
+      run: |
+        echo "🚀 Building image for release ${{ env.VERSION }}"
+        sudo ./docker-build.sh
+    
+    - name: Verify build
+      run: |
+        if [ -f "output/${{ env.IMAGE_NAME }}.img.xz" ]; then
+          echo "✅ Build successful!"
+          IMAGE_SIZE=$(du -h output/${{ env.IMAGE_NAME }}.img.xz | cut -f1)
+          echo "IMAGE_SIZE=$IMAGE_SIZE" >> $GITHUB_ENV
+          echo "Final image size: $IMAGE_SIZE"
+        else
+          echo "❌ Build failed"
+          exit 1
+        fi
+    
+    - name: Generate checksums
+      run: |
+        cd output
+        sha256sum ${{ env.IMAGE_NAME }}.img.xz > ${{ env.IMAGE_NAME }}.img.xz.sha256
+        sha512sum ${{ env.IMAGE_NAME }}.img.xz > ${{ env.IMAGE_NAME }}.img.xz.sha512
+        echo "Generated checksums:"
+        cat *.sha256
+        cat *.sha512
+    
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ env.VERSION }}
+        name: "Armbian OctoPrint Image ${{ env.VERSION }}"
+        body: |
+          # Armbian OctoPrint Image ${{ env.VERSION }}
+          
+          Ready-to-use Armbian image for Orange Pi 4 with OctoPrint, Docker, and WiFi hotspot.
+          
+          ## 📦 Image Details
+          - **Size:** ${{ env.IMAGE_SIZE }}
+          - **Architecture:** ARM64
+          - **Build Date:** ${{ github.run_id }}
+          
+          ## 🚀 Quick Start
+          1. **Download:** Get the .img.xz file below
+          2. **Verify:** `sha256sum -c ${{ env.IMAGE_NAME }}.img.xz.sha256`
+          3. **Extract:** `xz -d ${{ env.IMAGE_NAME }}.img.xz`
+          4. **Flash:** `sudo dd if=${{ env.IMAGE_NAME }}.img of=/dev/sdX bs=4M status=progress`
+          5. **Boot:** Insert SD card and power on Orange Pi 4
+          6. **Setup:** Connect to `comitup-XXXX` WiFi for initial configuration
+          7. **Access:** Portainer at `http://[device-ip]:9000`
+          8. **Deploy:** OctoPrint via Portainer using included stack template
+          
+          ## ⚠️ Default Credentials
+          - **System:** root / orangepi4 (⚠️ Change immediately!)
+          - **WiFi Hotspot:** comitup-XXXX / orangepi4
+          
+          ## 📁 What's Included
+          - Docker + Docker Compose
+          - Portainer (web-based Docker management)
+          - OctoPrint deployment template
+          - WiFi hotspot (ComitUp) for easy setup
+          - NetworkManager + Avahi
+          
+          Complete setup guide available in the repository.
+        files: |
+          output/${{ env.IMAGE_NAME }}.img.xz
+          output/${{ env.IMAGE_NAME }}.img.xz.sha256
+          output/${{ env.IMAGE_NAME }}.img.xz.sha512
+        draft: false
+        prerelease: ${{ github.event.inputs.prerelease }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Summary
+      run: |
+        echo "🎉 Release ${{ env.VERSION }} created successfully!"
+        echo "📦 Image size: ${{ env.IMAGE_SIZE }}"
+        echo "🔗 Release URL: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ env.VERSION }}"

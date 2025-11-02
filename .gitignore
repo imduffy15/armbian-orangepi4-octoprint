@@ -1,0 +1,16 @@
+# Build outputs and working directories
+*.img
+*.img.xz
+*.sha
+*.asc
+output/
+
+# Temporary files
+*.tmp
+*.log
+*.swp
+*~
+
+# OS specific
+.DS_Store
+Thumbs.db

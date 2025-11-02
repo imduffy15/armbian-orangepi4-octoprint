@@ -1,0 +1,15 @@
+[Unit]
+Description=Setup Docker Containers on First Boot
+After=docker.service
+Requires=docker.service
+ConditionPathExists=!/var/lib/setup-containers-done
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/docker-configs
+ExecStart=/usr/bin/docker-compose up -d
+ExecStartPost=/usr/bin/touch /var/lib/setup-containers-done
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
