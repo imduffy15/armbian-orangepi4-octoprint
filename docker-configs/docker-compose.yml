@@ -1,0 +1,119 @@
+version: '3.8'
+
+networks:
+  reverse-proxy:
+    driver: bridge
+
+services:
+  # Nginx Reverse Proxy
+  nginx-proxy:
+    image: nginxproxy/nginx-proxy:latest
+    container_name: nginx-proxy
+    restart: always
+    pull_policy: never  # Use local image only
+    ports:
+      - "80:80"
+    volumes:
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+      - ./nginx/vhost.d:/etc/nginx/vhost.d:ro
+    networks:
+      - reverse-proxy
+    depends_on:
+      - portainer
+      - octoprint
+      - ustreamer
+
+  # Portainer Service
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    restart: always
+    pull_policy: never  # Use local image only
+    environment:
+      - VIRTUAL_HOST=portainer.octoprint.local
+      - VIRTUAL_PORT=9000
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+    networks:
+      - reverse-proxy
+
+  # OctoPrint Service  
+  octoprint:
+    image: octoprint-orangepi-mk3s:latest
+    container_name: octoprint
+    restart: always
+    pull_policy: never  # Use local prebaked image only
+    environment:
+      - ENABLE_MJPG_STREAMER=true
+      - VIRTUAL_HOST=octoprint.local
+      - VIRTUAL_PORT=5000
+    devices:
+      - /dev/ttyUSB0:/dev/ttyUSB0
+      - /dev/video0:/dev/video0
+      - /dev/gpiomem:/dev/gpiomem
+      - /dev/gpiochip0:/dev/gpiochip0
+      - /dev/gpiochip1:/dev/gpiochip1
+      - /dev/gpiochip2:/dev/gpiochip2
+      - /dev/gpiochip3:/dev/gpiochip3
+      - /dev/gpiochip4:/dev/gpiochip4
+    volumes:
+      - octoprint_data:/octoprint
+      - /dev:/dev
+      - /sys:/sys
+    privileged: true
+    group_add:
+      - dialout
+      - gpio
+      - i2c
+      - spi
+      - video
+    networks:
+      - reverse-proxy
+    # Remove the complex command since everything is prebaked in our custom image
+
+  # uStreamer for Webcam
+  ustreamer:
+    image: pikvm/ustreamer:latest
+    container_name: ustreamer
+    restart: always
+    pull_policy: never  # Use local image only
+    environment:
+      - VIRTUAL_HOST=camera.octoprint.local
+      - VIRTUAL_PORT=8080
+    devices:
+      - /dev/video0:/dev/video0
+    command: >
+      --device=/dev/video0
+      --host=0.0.0.0
+      --port=8080
+      --resolution=1280x720
+      --format=MJPEG
+      --desired-fps=30
+      --buffers=3
+      --workers=3
+      --persistent
+      --drop-same-frames=30
+    networks:
+      - reverse-proxy
+    privileged: true
+
+  # Comitup Service (for WiFi setup) - Proxy to host comitup
+  comitup:
+    image: nginx:alpine
+    container_name: comitup-proxy
+    restart: always
+    pull_policy: never  # Use local image only
+    environment:
+      - VIRTUAL_HOST=setup.octoprint.local
+      - VIRTUAL_PORT=80
+    volumes:
+      - ./nginx/comitup.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - reverse-proxy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  portainer_data:
+  octoprint_data:

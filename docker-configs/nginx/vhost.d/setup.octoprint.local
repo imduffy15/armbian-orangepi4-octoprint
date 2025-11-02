@@ -1,0 +1,2 @@
+# Custom configuration for setup interface
+client_max_body_size 10m;

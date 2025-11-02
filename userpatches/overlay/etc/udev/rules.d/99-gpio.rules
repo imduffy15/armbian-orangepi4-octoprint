@@ -1,0 +1,25 @@
+# Orange Pi GPIO udev rules for non-root access
+# These rules allow members of the gpio group to access GPIO devices
+
+# GPIO character devices
+SUBSYSTEM=="gpio", KERNEL=="gpiochip*", GROUP="gpio", MODE="0660"
+
+# GPIO memory access
+KERNEL=="gpiomem", GROUP="gpio", MODE="0660"
+
+# GPIO sysfs access (legacy)
+SUBSYSTEM=="gpio", KERNEL=="gpio*", ACTION=="add", PROGRAM="/bin/sh -c 'chown -R root:gpio /sys/class/gpio/gpio%n && chmod -R 664 /sys/class/gpio/gpio%n'"
+
+# I2C devices (for hardware that may need I2C access)
+KERNEL=="i2c-[0-9]*", GROUP="i2c", MODE="0660"
+
+# SPI devices (for hardware that may need SPI access)
+KERNEL=="spidev[0-9]*.[0-9]*", GROUP="spi", MODE="0660"
+
+# Serial devices for 3D printer communication
+KERNEL=="ttyUSB[0-9]*", GROUP="dialout", MODE="0660"
+KERNEL=="ttyACM[0-9]*", GROUP="dialout", MODE="0660"
+KERNEL=="ttyS[0-9]*", GROUP="dialout", MODE="0660"
+
+# Video devices for webcam
+KERNEL=="video[0-9]*", GROUP="video", MODE="0660"

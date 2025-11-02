@@ -1,0 +1,46 @@
+# OctoPrint GPIO Configuration
+# This file provides configuration templates for GPIO relay control
+
+# Recommended OctoPrint Plugins for GPIO Control:
+# 1. PSU Control - Power supply control via GPIO
+# 2. Enclosure Plugin - Environmental control (lights, fans, heaters)
+# 3. GPIO Control - Direct GPIO pin control
+# 4. OctoRelay - Dedicated relay control plugin
+
+# GPIO Pin Assignments for Orange Pi 4 LTS
+# Use these pin numbers in OctoPrint plugins
+
+# Recommended pins for relay control (BCM numbering):
+# GPIO2  (Pin 3)  - Main Power Relay
+# GPIO3  (Pin 5)  - Heated Bed Relay  
+# GPIO4  (Pin 7)  - Hotend Relay
+# GPIO17 (Pin 11) - Enclosure Light
+# GPIO18 (Pin 12) - Exhaust Fan
+# GPIO27 (Pin 13) - Chamber Heater
+# GPIO22 (Pin 15) - Part Cooling Fan
+# GPIO23 (Pin 16) - Emergency Stop
+# GPIO24 (Pin 18) - Spare Relay 1
+# GPIO25 (Pin 22) - Spare Relay 2
+
+# Example PSU Control Plugin Configuration:
+# Switch GPIO Pin: 2
+# Inverted Output: False (depends on relay module)
+# Switching Method: GPIO
+# On Before Connect: True
+# Off After Disconnect: True
+
+# Example Enclosure Plugin Configuration for lights:
+# GPIO Pin: 17
+# Active High: True
+# Initial State: Off
+
+# For direct GPIO control in G-code, you can use:
+# M80 - Turn PSU on (if PSU Control plugin configured)
+# M81 - Turn PSU off
+# Custom G-code commands can be created for relay control
+
+# Safety Notes:
+# - Always use optocouplers for mains voltage isolation
+# - Use appropriate relay modules with flyback diodes
+# - Consider adding fuses for protection
+# - Test all connections with multimeter before powering on

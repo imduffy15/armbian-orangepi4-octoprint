@@ -1,0 +1,25 @@
+[Unit]
+Description=Pull Docker Images on First Boot
+Documentation=https://docs.docker.com/
+After=docker.service network-online.target
+Wants=docker.service network-online.target
+ConditionPathExists=/opt/docker-setup
+ConditionPathExists=!/opt/docker-setup/.images-pulled
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+TimeoutStartSec=600
+ExecStart=/opt/docker-setup/pull-docker-images.sh
+StandardOutput=journal
+StandardError=journal
+
+# Run as root since Docker daemon requires root access
+User=root
+Group=root
+
+# Set environment
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+[Install]
+WantedBy=multi-user.target

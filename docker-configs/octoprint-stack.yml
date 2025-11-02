@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  octoprint:
+    image: octoprint/octoprint:latest
+    container_name: octoprint
+    restart: always
+    ports:
+      - "5000:5000"
+    devices:
+      - /dev/ttyUSB0:/dev/ttyUSB0
+      - /dev/video0:/dev/video0
+    volumes:
+      - octoprint_data:/octoprint
+      - /dev:/dev  # Required for device access
+    privileged: true  # May be needed for USB device access
+    group_add:
+      - dialout
+    environment:
+      - ENABLE_MJPG_STREAMER=true
+    # Uncomment below if you want to run OctoPrint as a specific user
+    # user: "1000:1000"
+
+volumes:
+  octoprint_data:

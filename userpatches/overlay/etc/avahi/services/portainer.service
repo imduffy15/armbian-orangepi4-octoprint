@@ -1,0 +1,13 @@
+<?xml version="1.0" standalone='no'?>
+<!DOCTYPE service-group SYSTEM "avahi-service.dtd">
+<service-group>
+ <name replace-wildcards="yes">Portainer on %h</name>
+ <service>
+   <type>_http._tcp</type>
+   <port>80</port>
+   <host-name>portainer.octoprint.local</host-name>
+   <txt-record>path=/</txt-record>
+   <txt-record>description=Docker Container Management</txt-record>
+   <txt-record>service=portainer</txt-record>
+ </service>
+</service-group>

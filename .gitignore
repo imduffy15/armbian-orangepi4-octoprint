@@ -1,0 +1,19 @@
+# Build outputs and working directories
+*.img
+*.img.xz
+*.sha
+*.asc
+output/
+
+# Docker images (pulled at build time, not stored in repo)
+docker-images/
+
+# Temporary files
+*.tmp
+*.log
+*.swp
+*~
+
+# OS specific
+.DS_Store
+Thumbs.db

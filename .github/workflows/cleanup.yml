@@ -1,0 +1,74 @@
+name: Cleanup Old Artifacts
+
+on:
+  schedule:
+    # Run weekly on Sundays at 02:00 UTC
+    - cron: '0 2 * * 0'
+  workflow_dispatch:
+    inputs:
+      max_artifacts_age_days:
+        description: 'Maximum age of artifacts to keep (days)'
+        required: false
+        default: '30'
+        type: string
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+    
+    steps:
+    - name: Cleanup old artifacts
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const maxAgeDays = parseInt('${{ github.event.inputs.max_artifacts_age_days || "30" }}');
+          const cutoffDate = new Date();
+          cutoffDate.setDate(cutoffDate.getDate() - maxAgeDays);
+          
+          console.log(`🧹 Cleaning up artifacts older than ${maxAgeDays} days`);
+          console.log(`Cutoff date: ${cutoffDate.toISOString()}`);
+          
+          const { data: artifacts } = await github.rest.actions.listArtifactsForRepo({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            per_page: 100
+          });
+          
+          const oldArtifacts = artifacts.artifacts.filter(artifact => {
+            const createdAt = new Date(artifact.created_at);
+            return createdAt < cutoffDate;
+          });
+          
+          if (oldArtifacts.length === 0) {
+            console.log('✅ No old artifacts found');
+            return;
+          }
+          
+          console.log(`🗑️ Found ${oldArtifacts.length} old artifacts to delete`);
+          
+          let totalSizeBytes = 0;
+          for (const artifact of oldArtifacts) {
+            const createdAt = new Date(artifact.created_at);
+            const ageInDays = Math.floor((Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24));
+            const sizeMB = (artifact.size_in_bytes / 1024 / 1024).toFixed(2);
+            totalSizeBytes += artifact.size_in_bytes;
+            
+            console.log(`Deleting: ${artifact.name} (${sizeMB} MB, ${ageInDays} days old)`);
+            
+            try {
+              await github.rest.actions.deleteArtifact({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                artifact_id: artifact.id
+              });
+              console.log(`✅ Deleted successfully`);
+            } catch (error) {
+              console.log(`❌ Failed to delete: ${error.message}`);
+            }
+          }
+          
+          const totalSizeMB = (totalSizeBytes / 1024 / 1024).toFixed(2);
+          console.log(`📊 Cleanup complete: ${oldArtifacts.length} artifacts, ${totalSizeMB} MB freed`);

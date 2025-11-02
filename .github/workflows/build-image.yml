@@ -1,0 +1,85 @@
+name: Build Armbian OctoPrint Image
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  IMAGE_NAME: octoprint-orangepi4
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Set up build environment
+      run: |
+        # Set up workspace permissions for Docker
+        sudo chmod 777 $PWD
+    
+    - name: Build image
+      run: |
+        echo "🚀 Building Armbian OctoPrint image..."
+        sudo ./docker-build.sh
+    
+    - name: Verify build output
+      run: |
+        if [ -f "output/${{ env.IMAGE_NAME }}.img.xz" ]; then
+          echo "✅ Build successful!"
+          ls -lh output/
+          echo "Image size: $(du -h output/${{ env.IMAGE_NAME }}.img.xz | cut -f1)"
+        else
+          echo "❌ Build failed - no output image found"
+          exit 1
+        fi
+    
+    - name: Generate checksums
+      run: |
+        # Fix permissions on output directory (created by Docker as root)
+        sudo chown -R $USER:$USER output/
+        cd output
+        sha256sum ${{ env.IMAGE_NAME }}.img.xz > ${{ env.IMAGE_NAME }}.img.xz.sha256
+        echo "SHA256: $(cat *.sha256)"
+    
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.IMAGE_NAME }}-${{ github.sha }}
+        path: |
+          output/${{ env.IMAGE_NAME }}.img.xz
+          output/${{ env.IMAGE_NAME }}.img.xz.sha256
+        retention-days: 30
+    
+    - name: Create Release
+      if: startsWith(github.ref, 'refs/tags/v')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          output/${{ env.IMAGE_NAME }}.img.xz
+          output/${{ env.IMAGE_NAME }}.img.xz.sha256
+        body: |
+          ## Armbian OctoPrint Image ${{ github.ref_name }}
+          
+          Ready-to-use Armbian image for Orange Pi 4 with OctoPrint and Docker pre-installed.
+          
+          **How to use:**
+          1. Download the .img.xz file
+          2. Verify with SHA256: `sha256sum -c ${{ env.IMAGE_NAME }}.img.xz.sha256`
+          3. Extract: `xz -d ${{ env.IMAGE_NAME }}.img.xz`
+          4. Flash to SD card: `sudo dd if=${{ env.IMAGE_NAME }}.img of=/dev/sdX bs=4M`
+          5. Boot your Orange Pi 4
+          6. Access Portainer at `http://[device-ip]:9000`
+          7. Deploy OctoPrint via Portainer using the included stack template
+          
+          **Default credentials:** root/orangepi4 (change immediately!)
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
